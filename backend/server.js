@@ -417,7 +417,7 @@ app.post('/api/create_contrato', async (req, res) => {
     ) {
       return res.status(400).json({
         error:
-          'Assinado em must be before vigência início',
+          'Criado em must be before vigência início',
       })
     }
 

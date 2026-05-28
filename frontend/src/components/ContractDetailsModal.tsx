@@ -227,7 +227,7 @@ export default function ContractDetailsModal({ contract, children }: Props) {
                       />
                     </>
                   ) : (
-                    <InfoItem label="Assinado em" value={formatDate(String(data.criado_em ?? ''))} />
+                    <InfoItem label="Criado em" value={formatDate(String(data.criado_em ?? ''))} />
                   )}
                 </Box>
 
