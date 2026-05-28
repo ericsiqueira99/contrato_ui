@@ -217,7 +217,7 @@ export default function ContractDetailsModal({ contract, children }: Props) {
                 <Box p={4} borderRadius="xl" bg={sectionBg}>
                   {isEditing ? (
                     <>
-                      <FieldLabel>Assinado em</FieldLabel>
+                      <FieldLabel>Criado em</FieldLabel>
                       <Input
                         {...inputStyles}
                         type="date"

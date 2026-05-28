@@ -10,7 +10,7 @@ import {
   Textarea,
 } from '@chakra-ui/react'
 
-import { FileUp, Save } from 'lucide-react'
+import { FileUp, Loader2, Save } from 'lucide-react'
 import { useState } from 'react'
 
 import { useAppData } from '../contexts/ContractContext'
@@ -158,12 +158,14 @@ export default function NovoContrato() {
 
           {/* Upload */}
           <Box mb={6}>
-            <Label>Documento do contrato</Label>
+            <Text fontSize="sm" fontWeight="600" mb={2}>
+              Documento do contrato
+            </Text>
 
             <Flex
               as="label"
               border="2px dashed"
-              borderColor={borderColor}
+              borderColor={isUploading ? 'blue.500' : borderColor}
               borderRadius="xl"
               p={6}
               align="center"
@@ -171,25 +173,39 @@ export default function NovoContrato() {
               direction="column"
               gap={3}
               cursor={isUploading ? 'not-allowed' : 'pointer'}
-              opacity={isUploading ? 0.7 : 1}
+              opacity={isUploading ? 0.75 : 1}
+              transition="0.2s"
+              _hover={{ borderColor: 'blue.500' }}
             >
+              {/* ICON STATE */}
               {isUploading ? (
-                <Text>Processando...</Text>
+                <Loader2
+                  size={28}
+                  style={{ animation: 'spin 0.8s linear infinite' }}
+                />
               ) : (
-                <>
-                  <FileUp size={28} />
-                  <Text fontSize="sm" color={muted}>
-                    {uploadedFile?.name || 'Upload para auto preenchimento'}
-                  </Text>
-                </>
+                <FileUp size={28} />
               )}
 
+              {/* TEXT STATE */}
+              <Text fontSize="sm" color={muted} textAlign="center">
+                {isUploading
+                  ? 'Processando documento...'
+                  : uploadedFile
+                  ? `Arquivo: ${uploadedFile.name}`
+                  : 'Upload para auto preenchimento'}
+              </Text>
+
+              {/* FILE INPUT */}
               <Input
                 type="file"
                 hidden
+                disabled={isUploading}
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
                 onChange={async e => {
                   const file = e.target.files?.[0]
                   if (!file) return
+
                   setUploadedFile(file)
                   await autoComplete(file)
                 }}
@@ -305,7 +321,7 @@ export default function NovoContrato() {
 
             {/* Dates */}
             <Box>
-              <Label required>Assinado em</Label>
+              <Label required>Criado em</Label>
               <Input
                 type="date"
                 value={form.criado_em ?? ''}
