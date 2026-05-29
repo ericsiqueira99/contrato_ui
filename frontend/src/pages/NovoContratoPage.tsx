@@ -97,7 +97,7 @@ export default function NovoContrato() {
       })
 
       await fetchContracts()
-      // navigate('/contratos')
+      navigate('/contratos')
       showToast({
         type: "success",
         title: "Novo contrato criado com sucesso!",
