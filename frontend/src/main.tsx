@@ -5,12 +5,14 @@ import App from './App.tsx'
 import { ChakraProvider, defaultSystem } from '@chakra-ui/react'
 import { ColorModeProvider } from './components/ui/color-mode.tsx'
 import { AppDataProvider } from './contexts/ContractContext.tsx'
+import { AppToaster } from './components/ui/toaster.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
       <ChakraProvider value={defaultSystem}>
         <ColorModeProvider defaultTheme="dark">
             <AppDataProvider>
+                <AppToaster />
                 <App />
             </AppDataProvider>    
         </ColorModeProvider>

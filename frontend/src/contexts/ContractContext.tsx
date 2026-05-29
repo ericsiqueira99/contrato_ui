@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { API_URL, type Contract, type Empresa, type Secretaria, type Usuario } from '../types'
+import { showToast } from '../components/ui/app-toaster'
 
 type AppDataContextType = {
   contracts: Contract[],
@@ -57,6 +58,10 @@ export function AppDataProvider({children,}: Props) {
 
       setContracts(data)
     } catch (err) {
+      showToast({
+          type: "error",
+          title: "Error ao retornar contratos"
+        })
       setError(
         err instanceof Error
           ? err.message

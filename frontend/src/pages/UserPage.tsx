@@ -8,6 +8,7 @@ import {
   NativeSelect,
   Table,
   Text,
+  VStack,
 } from '@chakra-ui/react'
 
 import { Check, Pencil, Plus, X, Search} from 'lucide-react'
@@ -15,6 +16,7 @@ import { useState } from 'react'
 import { useAppData } from '../contexts/ContractContext'
 import { useColorModeValue } from '../components/ui/color-mode'
 import { API_URL, type Usuario } from '../types'
+import { showToast } from '../components/ui/app-toaster'
 
 
 export default function UsersTable() {
@@ -47,8 +49,8 @@ export default function UsersTable() {
   }
 
   async function handleSave() {
+    const isNew = !editedUser?.id || editedUser.id === 'new'
     try {
-        const isNew = !editedUser?.id || editedUser.id === 'new'
 
         const url = isNew
         ? `${API_URL}/user/`
@@ -70,9 +72,16 @@ export default function UsersTable() {
         })
 
         await fetchUsers()
+        showToast({
+          type: "error",
+          title: isNew ? "Usuario criado com sucesso!" : "Usuario atualizado com sucesso!",
+        })
         cancelEditing()
     } catch (err) {
-        console.error(err)
+        showToast({
+          type: "error",
+          title: isNew ? "Error ao criar usuario" : "Error ao atualizar usuario",
+        })
     }
     }
 
@@ -81,9 +90,12 @@ export default function UsersTable() {
       id: 'new',
       nome: '',
       email: '',
+      telefone: '',
       secretaria_id: '',
     })
   }
+
+   const isValid = (editedUser?.nome ?? "").trim().length > 0
 
   function getSecretariaName(id?: number | string) {
     return secretarias.find(s => String(s.id) === String(id))?.nome ?? '—'
@@ -218,6 +230,7 @@ export default function UsersTable() {
               <Table.Row>
                 <Table.ColumnHeader>Nome</Table.ColumnHeader>
                 <Table.ColumnHeader>Email</Table.ColumnHeader>
+                <Table.ColumnHeader>Telefone</Table.ColumnHeader>
                 <Table.ColumnHeader>Secretaria</Table.ColumnHeader>
 
                 <Table.ColumnHeader textAlign="right" w="120px">
@@ -231,65 +244,105 @@ export default function UsersTable() {
               {editingId === 'new' && (
                 <Table.Row bg="blue.500/5">
                   <Table.Cell>
-                    <Input
-                      size="sm"
-                      value={editedUser?.nome ?? ''}
-                      onChange={e => updateField('nome', e.target.value)}
-                      placeholder="Nome"
-                    />
-                  </Table.Cell>
+                    <VStack align="start" gap={1}>
+                      <Text color="red.500" h="20px">
+                        *
+                      </Text>
 
-                  <Table.Cell>
-                    <Input
-                      size="sm"
-                      value={String(editedUser?.email) ?? ''}
-                      onChange={e => updateField('email', e.target.value)}
-                      placeholder="Email"
-                    />
-                  </Table.Cell>
-
-                  <Table.Cell>
-                    <NativeSelect.Root size="sm">
-                      <NativeSelect.Field
-                        value={String(editedUser?.secretaria_id ?? '')}
-                        onChange={e => updateField('secretaria_id', e.target.value)}
-                      >
-                        <option value="">Selecione</option>
-
-                        {secretarias.map(secretaria => (
-                          <option
-                            key={String(secretaria.id)}
-                            value={String(secretaria.id)}
-                          >
-                            {secretaria.nome}
-                          </option>
-                        ))}
-                      </NativeSelect.Field>
-
-                      <NativeSelect.Indicator />
-                    </NativeSelect.Root>
-                  </Table.Cell>
-
-                  <Table.Cell>
-                    <Flex justify="flex-end" gap={2}>
-                      <IconButton
-                        aria-label="Salvar"
+                      <Input
                         size="sm"
-                        colorPalette="green"
-                        onClick={handleSave}
-                      >
-                        <Check size={14} />
-                      </IconButton>
+                        value={editedUser?.nome ?? ""}
+                        onChange={e => updateField("nome", e.target.value)}
+                        placeholder="Nome"
+                      />
+                    </VStack>
+                  </Table.Cell>
 
-                      <IconButton
-                        aria-label="Cancelar"
+                  <Table.Cell>
+                    <VStack align="start" gap={1}>
+                      <Text visibility="hidden" h="20px">
+                        *
+                      </Text>
+
+                      <Input
                         size="sm"
-                        variant="outline"
-                        onClick={cancelEditing}
-                      >
-                        <X size={14} />
-                      </IconButton>
-                    </Flex>
+                        value={editedUser?.email ?? ""}
+                        onChange={e => updateField("email", e.target.value)}
+                        placeholder="Email"
+                      />
+                    </VStack>
+                  </Table.Cell>
+
+                  <Table.Cell>
+                    <VStack align="start" gap={1}>
+                      <Text visibility="hidden" h="20px">
+                        *
+                      </Text>
+
+                      <Input
+                        size="sm"
+                        value={editedUser?.telefone ?? ""}
+                        onChange={e => updateField("telefone", e.target.value)}
+                        placeholder="Telefone"
+                      />
+                    </VStack>
+                  </Table.Cell>
+
+                  <Table.Cell>
+                    <VStack align="start" gap={1} w="full">
+                      <Text visibility="hidden" h="20px">
+                        *
+                      </Text>
+
+                      <NativeSelect.Root size="sm" w="full">
+                        <NativeSelect.Field
+                          value={String(editedUser?.secretaria_id ?? "")}
+                          onChange={e => updateField("secretaria_id", e.target.value)}
+                        >
+                          <option value="">Selecione</option>
+
+                          {secretarias.map(secretaria => (
+                            <option
+                              key={String(secretaria.id)}
+                              value={String(secretaria.id)}
+                            >
+                              {secretaria.nome}
+                            </option>
+                          ))}
+                        </NativeSelect.Field>
+
+                        <NativeSelect.Indicator />
+                      </NativeSelect.Root>
+                    </VStack>
+                  </Table.Cell>
+
+                  <Table.Cell>
+                    <VStack align="stretch" gap={1}>
+                      <Text visibility="hidden" h="20px">
+                        *
+                      </Text>
+
+                      <Flex justify="flex-end" gap={2}>
+                        <IconButton
+                          aria-label="Salvar"
+                          size="sm"
+                          colorPalette="green"
+                          onClick={handleSave}
+                          disabled={!isValid}
+                        >
+                          <Check size={14} />
+                        </IconButton>
+
+                        <IconButton
+                          aria-label="Cancelar"
+                          size="sm"
+                          variant="outline"
+                          onClick={cancelEditing}
+                        >
+                          <X size={14} />
+                        </IconButton>
+                      </Flex>
+                    </VStack>
                   </Table.Cell>
                 </Table.Row>
               )}
@@ -302,11 +355,17 @@ export default function UsersTable() {
                   <Table.Row key={String(user.id)}>
                     <Table.Cell>
                       {isEditing ? (
-                        <Input
-                          size="sm"
-                          value={editedUser?.nome ?? ''}
-                          onChange={e => updateField('nome', e.target.value)}
-                        />
+                        <VStack align="start" gap={1}>
+                          <Text color="red.500" h="20px">
+                            *
+                          </Text>
+
+                          <Input
+                            size="sm"
+                            value={editedUser?.nome ?? ""}
+                            onChange={e => updateField("nome", e.target.value)}
+                          />
+                        </VStack>
                       ) : (
                         <Text fontWeight="500">{user.nome}</Text>
                       )}
@@ -314,39 +373,71 @@ export default function UsersTable() {
 
                     <Table.Cell>
                       {isEditing ? (
-                        <Input
-                          size="sm"
-                          value={String(editedUser?.email) ?? ''}
-                          onChange={e => updateField('email', e.target.value)}
-                        />
+                        <VStack align="start" gap={1}>
+                          <Text visibility="hidden" h="20px">
+                            *
+                          </Text>
+
+                          <Input
+                            size="sm"
+                            value={editedUser?.email ?? ""}
+                            onChange={e => updateField("email", e.target.value)}
+                          />
+                        </VStack>
                       ) : (
                         <Text fontSize="sm" color={muted}>
-                          {String(user.email) ?? ""}
+                          {user.email?.trim() ? user.email : "-"}
                         </Text>
                       )}
                     </Table.Cell>
 
                     <Table.Cell>
                       {isEditing ? (
-                        <NativeSelect.Root size="sm">
-                          <NativeSelect.Field
-                            value={String(editedUser?.secretaria_id ?? '')}
-                            onChange={e =>
-                              updateField('secretaria_id', e.target.value)
-                            }
-                          >
-                            {secretarias.map(secretaria => (
-                              <option
-                                key={String(secretaria.id)}
-                                value={String(secretaria.id)}
-                              >
-                                {secretaria.nome}
-                              </option>
-                            ))}
-                          </NativeSelect.Field>
+                        <VStack align="start" gap={1}>
+                          <Text visibility="hidden" h="20px">
+                            *
+                          </Text>
 
-                          <NativeSelect.Indicator />
-                        </NativeSelect.Root>
+                          <Input
+                            size="sm"
+                            value={editedUser?.telefone ?? ""}
+                            onChange={e => updateField("telefone", e.target.value)}
+                          />
+                        </VStack>
+                      ) : (
+                        <Text fontSize="sm" color={muted}>
+                          {user.telefone?.trim() ? user.telefone : "-"}
+                        </Text>
+                      )}
+                    </Table.Cell>
+
+                    <Table.Cell>
+                      {isEditing ? (
+                        <VStack align="start" gap={1} w="full">
+                          <Text visibility="hidden" h="20px">
+                            *
+                          </Text>
+
+                          <NativeSelect.Root size="sm" w="full">
+                            <NativeSelect.Field
+                              value={String(editedUser?.secretaria_id ?? "")}
+                              onChange={e =>
+                                updateField("secretaria_id", e.target.value)
+                              }
+                            >
+                              {secretarias.map(secretaria => (
+                                <option
+                                  key={String(secretaria.id)}
+                                  value={String(secretaria.id)}
+                                >
+                                  {secretaria.nome}
+                                </option>
+                              ))}
+                            </NativeSelect.Field>
+
+                            <NativeSelect.Indicator />
+                          </NativeSelect.Root>
+                        </VStack>
                       ) : (
                         <Badge variant="subtle" colorPalette="blue">
                           {getSecretariaName(String(user.secretaria_id) ?? "")}
@@ -355,14 +446,19 @@ export default function UsersTable() {
                     </Table.Cell>
 
                     <Table.Cell>
-                      <Flex justify="flex-end" gap={2}>
-                        {isEditing ? (
-                          <>
+                      {isEditing ? (
+                        <VStack align="stretch" gap={1}>
+                          <Text visibility="hidden" h="20px">
+                            *
+                          </Text>
+
+                          <Flex justify="flex-end" gap={2}>
                             <IconButton
                               aria-label="Salvar"
                               size="sm"
                               colorPalette="green"
                               onClick={handleSave}
+                              disabled={!isValid}
                             >
                               <Check size={14} />
                             </IconButton>
@@ -375,8 +471,10 @@ export default function UsersTable() {
                             >
                               <X size={14} />
                             </IconButton>
-                          </>
-                        ) : (
+                          </Flex>
+                        </VStack>
+                      ) : (
+                        <Flex justify="flex-end">
                           <IconButton
                             aria-label="Editar"
                             size="sm"
@@ -385,8 +483,8 @@ export default function UsersTable() {
                           >
                             <Pencil size={14} />
                           </IconButton>
-                        )}
-                      </Flex>
+                        </Flex>
+                      )}
                     </Table.Cell>
                   </Table.Row>
                 )

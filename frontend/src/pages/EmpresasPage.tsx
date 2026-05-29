@@ -6,6 +6,7 @@ import {
   Input,
   Table,
   Text,
+  VStack,
 } from '@chakra-ui/react'
 
 import { Check, Pencil, Plus, Search, Trash, X } from 'lucide-react'
@@ -14,6 +15,7 @@ import { useState } from 'react'
 import { useAppData } from '../contexts/ContractContext'
 import { useColorModeValue } from '../components/ui/color-mode'
 import { API_URL, type Empresa } from '../types'
+import { showToast } from '../components/ui/app-toaster'
 
 export default function EmpresaPage() {
   const { empresas, fetchEmpresas } = useAppData()
@@ -45,40 +47,64 @@ export default function EmpresaPage() {
 
   async function handleSave() {
     const isNew = editingId === 'new'
+    try {
+      const url = isNew
+        ? `${API_URL}/create_empresa`
+        : `${API_URL}/update_empresa/${editedItem?.id}`
 
-    const url = isNew
-      ? `${API_URL}/create_empresa`
-      : `${API_URL}/update_empresa/${editedItem?.id}`
+      const method = isNew ? 'POST' : 'PUT'
 
-    const method = isNew ? 'POST' : 'PUT'
+      const payload = { ...editedItem }
+      if (isNew) delete payload.id
+      
+      await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
 
-    const payload = { ...editedItem }
-    if (isNew) delete payload.id
-
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    await fetchEmpresas()
-    cancelEditing()
+      await fetchEmpresas()
+      cancelEditing()
+      showToast({
+          type: "success",
+          title: isNew ? "Empresa criada com sucesso!" : "Empresa atualizada com sucesso!",
+        })
+    } catch (err) {
+      showToast({
+        type: "error",
+        title: isNew ? "Error ao criar empresa" : "Error ao atualizar empreasa",
+      })
+    }
   }
 
   async function handleDelete(id?: number | string) {
     if (!id) return
+      try{
+        await fetch(`${API_URL}/delete_empresa/${id}`, {
+        method: 'DELETE',
+      })
 
-    await fetch(`${API_URL}/delete_empresa/${id}`, {
-      method: 'DELETE',
-    })
-
-    await fetchEmpresas()
-    cancelEditing()
+      await fetchEmpresas()
+      cancelEditing()
+      showToast({
+        type: "success",
+        title:"Empresa deletada com sucesso!",
+      })
+    }
+    catch(err){
+      showToast({
+        type: "error",
+        title:"Error ao deletar empresa",
+      })
+    }
+    
   }
+
+  const isValid = (editedItem?.razao_social ?? "").trim().length > 0 && (editedItem?.cnpj ?? "").trim().length > 0
 
   function addNew() {
     setEditingId('new')
-    setEditedItem({ razao_social: '', cnpj: '' })
+    setEditedItem({ razao_social: '', cnpj: '', telefone: '', email: ''})
   }
 
   const filtered = empresas.filter(s =>
@@ -146,6 +172,8 @@ export default function EmpresaPage() {
               <Table.Row>
                 <Table.ColumnHeader>Razão Social</Table.ColumnHeader>
                 <Table.ColumnHeader>CNPJ</Table.ColumnHeader>
+                <Table.ColumnHeader>Email</Table.ColumnHeader>
+                <Table.ColumnHeader>Telefone</Table.ColumnHeader>
                 <Table.ColumnHeader textAlign="right">Ações</Table.ColumnHeader>
               </Table.Row>
             </Table.Header>
@@ -156,30 +184,86 @@ export default function EmpresaPage() {
               {editingId === 'new' && (
                 <Table.Row bg="blue.500/5">
                    <Table.Cell>
-                    <Input
-                      size="sm"
-                      value={editedItem?.razao_social ?? ''}
-                      onChange={e => updateField('razao_social', e.target.value)}
-                    />
+                    <VStack align="start" gap={1}>
+                      <Text color="red.500" h="20px">
+                        *
+                      </Text>
+
+                      <Input
+                        size="sm"
+                        value={editedItem?.razao_social ?? ""}
+                        onChange={e => updateField("razao_social", e.target.value)}
+                      />
+                    </VStack>
                   </Table.Cell>
 
                   <Table.Cell>
-                    <Input
-                      size="sm"
-                      value={String(editedItem?.cnpj) ?? ''}
-                      onChange={e => updateField('cnpj', e.target.value)}
-                    />
+                    <VStack align="start" gap={1}>
+                      <Text color="red.500" h="20px">
+                        *
+                      </Text>
+
+                      <Input
+                        size="sm"
+                        value={editedItem?.cnpj ?? ""}
+                        onChange={e => updateField("cnpj", e.target.value)}
+                      />
+                    </VStack>
                   </Table.Cell>
 
                   <Table.Cell>
-                    <Flex justify="flex-end" gap={2}>
-                      <IconButton colorPalette="green" size="sm" onClick={handleSave}>
-                        <Check size={14} />
-                      </IconButton>
-                      <IconButton size="sm" variant="outline" onClick={cancelEditing}>
-                        <X size={14} />
-                      </IconButton>
-                    </Flex>
+                    <VStack align="start" gap={1}>
+                      <Text visibility="hidden" h="20px">
+                        *
+                      </Text>
+
+                      <Input
+                        size="sm"
+                        value={editedItem?.email ?? ""}
+                        onChange={e => updateField("email", e.target.value)}
+                      />
+                    </VStack>
+                  </Table.Cell>
+
+                  <Table.Cell>
+                    <VStack align="start" gap={1}>
+                      <Text visibility="hidden" h="20px">
+                        *
+                      </Text>
+
+                      <Input
+                        size="sm"
+                        value={editedItem?.telefone ?? ""}
+                        onChange={e => updateField("telefone", e.target.value)}
+                      />
+                    </VStack>
+                  </Table.Cell>
+
+                  <Table.Cell>
+                    <VStack align="stretch" gap={1} h="full">
+                      <Text visibility="hidden" h="20px">
+                        *
+                      </Text>
+
+                      <Flex justify="flex-end" gap={2}>
+                        <IconButton
+                          colorPalette="green"
+                          size="sm"
+                          onClick={handleSave}
+                          disabled={!isValid}
+                        >
+                          <Check size={14} />
+                        </IconButton>
+
+                        <IconButton
+                          size="sm"
+                          variant="outline"
+                          onClick={cancelEditing}
+                        >
+                          <X size={14} />
+                        </IconButton>
+                      </Flex>
+                    </VStack>
                   </Table.Cell>
                 </Table.Row>
               )}
@@ -192,32 +276,96 @@ export default function EmpresaPage() {
                   <Table.Row key={String(item.id)}>
                     <Table.Cell>
                       {isEditing ? (
-                        <Input
-                          size="sm"
-                          value={String(editedItem?.razao_social) ?? ''}
-                          onChange={e => updateField('razao_social', e.target.value)}
-                        />
+                        <VStack align="start" gap={1}>
+                          <Text color="red.500" h="20px">
+                            *
+                          </Text>
+
+                          <Input
+                            size="sm"
+                            value={editedItem?.razao_social ?? ""}
+                            onChange={e => updateField("razao_social", e.target.value)}
+                          />
+                        </VStack>
                       ) : (
                         <Text fontWeight="500">{item.razao_social}</Text>
                       )}
                     </Table.Cell>
-                     <Table.Cell>
+
+                    <Table.Cell>
                       {isEditing ? (
-                        <Input
-                          size="sm"
-                          value={String(editedItem?.cnpj) ?? ''}
-                          onChange={e => updateField('cnpj', e.target.value)}
-                        />
+                        <VStack align="start" gap={1}>
+                          <Text color="red.500" h="20px">
+                            *
+                          </Text>
+
+                          <Input
+                            size="sm"
+                            value={editedItem?.cnpj ?? ""}
+                            onChange={e => updateField("cnpj", e.target.value)}
+                          />
+                        </VStack>
                       ) : (
-                        <Text fontWeight="500">{String(item.cnpj)}</Text>
+                        <Text fontWeight="500">
+                          {item.cnpj?.trim() ? item.cnpj : "-"}
+                        </Text>
                       )}
                     </Table.Cell>
 
                     <Table.Cell>
-                      <Flex justify="flex-end" gap={2}>
-                        {isEditing ? (
-                          <>
-                            <IconButton colorPalette="green" size="sm" onClick={handleSave}>
+                      {isEditing ? (
+                        <VStack align="start" gap={1}>
+                          <Text visibility="hidden" h="20px">
+                            *
+                          </Text>
+
+                          <Input
+                            size="sm"
+                            value={editedItem?.email ?? ""}
+                            onChange={e => updateField("email", e.target.value)}
+                          />
+                        </VStack>
+                      ) : (
+                        <Text fontWeight="500">
+                          {item.email?.trim() ? item.email : "-"}
+                        </Text>
+                      )}
+                    </Table.Cell>
+
+                    <Table.Cell>
+                      {isEditing ? (
+                        <VStack align="start" gap={1}>
+                          <Text visibility="hidden" h="20px">
+                            *
+                          </Text>
+
+                          <Input
+                            size="sm"
+                            value={editedItem?.telefone ?? ""}
+                            onChange={e => updateField("telefone", e.target.value)}
+                          />
+                        </VStack>
+                      ) : (
+                        <Text fontWeight="500">
+                          {item.telefone?.trim() ? item.telefone : "-"}
+                        </Text>
+                      )}
+                    </Table.Cell>
+
+                    <Table.Cell>
+                      {isEditing ? (
+                        <VStack align="stretch" gap={1}>
+                          <Text visibility="hidden" h="20px">
+                            *
+                          </Text>
+
+                          <Flex justify="flex-end" gap={2}>
+                            <IconButton
+                              colorPalette="green"
+                              size="sm"
+                              onClick={handleSave}
+                              disabled={!isValid}
+                            >
                               <Check size={14} />
                             </IconButton>
 
@@ -225,21 +373,30 @@ export default function EmpresaPage() {
                               colorPalette="red"
                               size="sm"
                               onClick={() => handleDelete(item.id)}
-                              disabled
                             >
                               <Trash size={14} />
                             </IconButton>
 
-                            <IconButton size="sm" variant="outline" onClick={cancelEditing}>
+                            <IconButton
+                              size="sm"
+                              variant="outline"
+                              onClick={cancelEditing}
+                            >
                               <X size={14} />
                             </IconButton>
-                          </>
-                        ) : (
-                          <IconButton size="sm" variant="outline" onClick={() => startEditing(item)}>
+                          </Flex>
+                        </VStack>
+                      ) : (
+                        <Flex justify="flex-end">
+                          <IconButton
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startEditing(item)}
+                          >
                             <Pencil size={14} />
                           </IconButton>
-                        )}
-                      </Flex>
+                        </Flex>
+                      )}
                     </Table.Cell>
                   </Table.Row>
                 )

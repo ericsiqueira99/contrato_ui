@@ -6,6 +6,7 @@ import {
   Input,
   NativeSelect,
   Separator,
+  Tag,
   Text,
   Textarea,
 } from '@chakra-ui/react'
@@ -15,23 +16,11 @@ import { useState } from 'react'
 
 import { useAppData } from '../contexts/ContractContext'
 import { useColorModeValue } from '../components/ui/color-mode'
-import { API_URL } from '../types'
+import { API_URL, type NovoContratoForm } from '../types'
 import { useNavigate } from 'react-router-dom'
+import { showToast } from '../components/ui/app-toaster'
+import { findBestMatchEmpresaId, findBestMatchSecretariaId, formatDateToInput } from '../functions'
 
-type NovoContratoForm = {
-  numero_contrato?: string
-  objeto?: string
-  valor_inicial?: string
-  vigencia_inicio?: string
-  vigencia_fim?: string
-  secretaria_id?: string | number
-  empresa_id?: string | number
-  gestor_id?: string | number
-  legislacao?: string
-  publicado_ama?: boolean | null
-  publicado_pncp?: boolean | null
-  criado_em?: string
-}
 
 export default function NovoContrato() {
   const { secretarias, usuarios, empresas, fetchContracts } = useAppData()
@@ -108,9 +97,16 @@ export default function NovoContrato() {
       })
 
       await fetchContracts()
-      navigate('/contratos')
+      // navigate('/contratos')
+      showToast({
+        type: "success",
+        title: "Novo contrato criado com sucesso!",
+      })
     } catch (err) {
-      console.error(err)
+      showToast({
+        type: "error",
+        title: "Erro criando contrato",
+      })
     }
   }
 
@@ -118,10 +114,60 @@ export default function NovoContrato() {
     try {
       setIsUploading(true)
 
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      const formData = new FormData()
+      formData.append("arquivo", file)
 
-      console.log(file)
+      const response = await fetch("https://controle-contratos-n8n-contratos.a9vwt7.easypanel.host/webhook/processar-contrato", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        showToast({
+          type: "error",
+          title:"Error ao processar arquivo",
+        })
+        // throw new Error("Erro ao processar ficheiro")
+      }
+
+      const data = await response.json()
+
+      console.log("n8n result:", data)
+
+      // fill simple fields directly
+      setForm(prev => ({
+        ...prev,
+        numero_contrato: data.numero_contrato,
+        objeto: data.objeto,
+        valor_inicial: String(data.valor_inicial ?? ""),
+        vigencia_inicio: formatDateToInput(data.vigencia_inicio),
+        vigencia_fim: formatDateToInput(data.vigencia_fim),
+        assinado_em: formatDateToInput(data.assinado_em),
+        legislacao: data.legislacao,
+      }))
+
+      // fuzzy match for relations
+      const empresaId = findBestMatchEmpresaId(data.empresa, empresas)
+      const secretariaId = findBestMatchSecretariaId(data.secretaria, secretarias)
+
+      setForm(prev => ({
+        ...prev,
+        empresa_id: empresaId ?? "",
+        secretaria_id: secretariaId ?? "",
+      }))
+
+    } catch (err) {
+      console.error(err)
+      showToast({
+        type: "error",
+        title: "Erro ao processar arquivo",
+        description: "Não foi possível extrair os dados do documento",
+      })
     } finally {
+      showToast({
+        type: "success",
+        title: "Arquivo processado com sucesso!",
+      })
       setIsUploading(false)
     }
   }
@@ -223,6 +269,7 @@ export default function NovoContrato() {
               <Input
                 bg={inputBg}
                 value={form.numero_contrato ?? ''}
+                placeholder='000/2026'
                 onChange={e => setField('numero_contrato', e.target.value)}
               />
             </Box>
@@ -234,6 +281,7 @@ export default function NovoContrato() {
                 <NativeSelect.Field
                   value={String(form.legislacao ?? '')}
                   onChange={e => setField('legislacao', e.target.value)}
+                  cursor="pointer"
                 >
                   <option value="">Selecionar...</option>
                   <option value="14.133">14.133</option>
@@ -249,6 +297,7 @@ export default function NovoContrato() {
                 bg={inputBg}
                 value={form.objeto ?? ''}
                 onChange={e => setField('objeto', e.target.value)}
+                placeholder='Descrição'
               />
             </Box>
 
@@ -272,6 +321,7 @@ export default function NovoContrato() {
                 <NativeSelect.Field
                   value={String(form.secretaria_id ?? '')}
                   onChange={e => setField('secretaria_id', e.target.value)}
+                  cursor="pointer"
                 >
                   <option value="">Selecionar...</option>
                   {secretarias.map(s => (
@@ -290,6 +340,7 @@ export default function NovoContrato() {
                 <NativeSelect.Field
                   value={String(form.empresa_id ?? '')}
                   onChange={e => setField('empresa_id', e.target.value)}
+                  cursor="pointer"
                 >
                   <option value="">Selecionar...</option>
                   {empresas.map(e => (
@@ -308,6 +359,7 @@ export default function NovoContrato() {
                 <NativeSelect.Field
                   value={String(form.gestor_id ?? '')}
                   onChange={e => setField('gestor_id', e.target.value)}
+                  cursor="pointer"
                 >
                   <option value="">Selecionar...</option>
                   {usuarios.map(u => (
@@ -319,13 +371,70 @@ export default function NovoContrato() {
               </NativeSelect.Root>
             </Box>
 
-            {/* Dates */}
+            {/* Fiscais */}
             <Box>
+              <Label>Fiscais</Label>
+              <NativeSelect.Root>
+                <NativeSelect.Field
+                  value=""
+                  onChange={e => {
+                    const id = Number(e.target.value)
+                    if (!id) return
+                    if (!form.fiscais?.includes(id)) {
+                      setField('fiscais', [...(form.fiscais ?? []), id])
+                    }
+                  }}
+                  cursor="pointer"
+                >
+                  <option value="">Adicionar fiscal...</option>
+                  {usuarios
+                    .filter(u => !form.fiscais?.includes(Number(u.id)))
+                    .map(u => (
+                      <option key={u.id} value={String(u.id)}>
+                        {u.nome}
+                      </option>
+                    ))}
+                </NativeSelect.Field>
+              </NativeSelect.Root>
+
+              {/* Selected fiscais tags */}
+              {form.fiscais && form.fiscais.length > 0 && (
+                <Flex gap="2" mt="2" wrap="wrap">
+                  {form.fiscais?.map(id => {
+                    const usuario = usuarios.find(u => u.id === id)
+                    return (
+                      <Tag.Root key={id} size="md" variant="subtle">
+                        <Tag.Label>{usuario?.nome ?? id}</Tag.Label>
+                        <Tag.EndElement>
+                          <Tag.CloseTrigger
+                            onClick={() =>
+                              setField('fiscais', form.fiscais?.filter(f => f !== id))
+                            }
+                          />
+                        </Tag.EndElement>
+                      </Tag.Root>
+                    )
+                  })}
+                </Flex>
+              )}
+            </Box>      
+            {/* Dates */}
+            {/* <Box>
               <Label required>Criado em</Label>
               <Input
                 type="date"
                 value={form.criado_em ?? ''}
                 onChange={e => setField('criado_em', e.target.value)}
+              />
+            </Box> */}
+
+            <Box>
+              <Label required>Assinado em</Label>
+              <Input
+                type="date"
+                value={form.assinado_em ?? ''}
+                onChange={e => setField('assinado_em', e.target.value)}
+                cursor="pointer"
               />
             </Box>
 
@@ -334,7 +443,9 @@ export default function NovoContrato() {
               <Input
                 type="date"
                 value={form.vigencia_inicio ?? ''}
+                max={form.vigencia_fim ?? undefined}
                 onChange={e => setField('vigencia_inicio', e.target.value)}
+                cursor="pointer"
               />
             </Box>
 
@@ -343,7 +454,9 @@ export default function NovoContrato() {
               <Input
                 type="date"
                 value={form.vigencia_fim ?? ''}
+                min={form.vigencia_inicio ?? undefined}
                 onChange={e => setField('vigencia_fim', e.target.value)}
+                cursor="pointer"
               />
             </Box>
 

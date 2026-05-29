@@ -44,23 +44,23 @@ const COLUMNS: Column[] = [
     },
   },
   {
-    id: 'expiring30',
-    label: 'Pra vencer (30 dias)',
+    id: 'expiring60',
+    label: 'Pra vencer (60 dias)',
     color: 'orange',
     accent: '#f9f516',
     filter: (c) => {
       const diff = daysDiff(c.vigencia_fim)
-      return diff !== null && diff > 0 && diff <= 30
+      return diff !== null && diff > 30 && diff <= 60
     },
   },
   {
-    id: 'expiring60',
-    label: 'Pra vencer (60 dias)',
+    id: 'expiring30',
+    label: 'Pra vencer (30 dias)',
     color: 'orange',
     accent: '#f97316',
     filter: (c) => {
       const diff = daysDiff(c.vigencia_fim)
-      return diff !== null && diff > 30 && diff <= 60
+      return diff !== null && diff > 0 && diff <= 30
     },
   },
   {

@@ -12,11 +12,13 @@ import {
   Separator,
   Text,
   Checkbox,
+  Tag,
 } from '@chakra-ui/react'
 import { Pencil, X, Check } from 'lucide-react'
 import { useColorModeValue } from './ui/color-mode'
 import { API_URL, type Contract } from '../types'
 import { useAppData } from '../contexts/ContractContext'
+import { showToast } from './ui/app-toaster'
 
 type Props = {
   contract: Contract
@@ -94,7 +96,6 @@ export default function ContractDetailsModal({ contract, children }: Props) {
   }
 
   async function handleSave() {
-    console.log(form)
     try {
         await fetch(
         `${API_URL}/update_contract/${form.id}`,
@@ -109,10 +110,17 @@ export default function ContractDetailsModal({ contract, children }: Props) {
         )
 
         await fetchContracts()
-
+        showToast({
+          type: "success",
+          title: "Contrato atualizado com sucesso!",
+        })
+        //toast with scucess message
         setIsEditing(false)
     } catch (err) {
-        console.error(err)
+      showToast({
+        type: "error",
+        title: "Erro salvando contrato",
+      })
     }
   }
 
@@ -147,6 +155,9 @@ export default function ContractDetailsModal({ contract, children }: Props) {
                         fontWeight="700"
                         mb={2}
                       />
+                      <Text fontSize="xs" color={metaColor} mt={1}>
+                        Criado em: {toInputDate(String(form.criado_em ?? ''))}
+                      </Text>
                       <FieldLabel>Número do Contrato</FieldLabel>
                       <Input
                         {...inputStyles}
@@ -160,6 +171,9 @@ export default function ContractDetailsModal({ contract, children }: Props) {
                       <Dialog.Title fontSize="xl" fontWeight="700" color={titleColor} lineHeight="1.2">
                         {data.objeto}
                       </Dialog.Title>
+                      <Text fontSize="xs" color={metaColor} mt={1}>
+                        Criado em: {toInputDate(String(form.criado_em ?? ''))}
+                      </Text>
                       {data.numero_contrato && (
                         <Text mt={2} fontSize="sm" color={metaColor}>
                           Contrato nº {data.numero_contrato}
@@ -221,13 +235,13 @@ export default function ContractDetailsModal({ contract, children }: Props) {
                       <Input
                         {...inputStyles}
                         type="date"
-                        value={toInputDate(String(form.criado_em ?? ''))}
+                        value={toInputDate(String(form.assinado_em ?? ''))}
                         max={toInputDate(String(form.vigencia_inicio ?? ''))}
-                        onChange={e => setField('criado_em', e.target.value)}
+                        onChange={e => setField('assinado_em', e.target.value)}
                       />
                     </>
                   ) : (
-                    <InfoItem label="Criado em" value={formatDate(String(data.criado_em ?? ''))} />
+                    <InfoItem label="Criado em" value={formatDate(String(data.assinado_em ?? ''))} />
                   )}
                 </Box>
 
@@ -240,7 +254,7 @@ export default function ContractDetailsModal({ contract, children }: Props) {
                         {...inputStyles}
                         type="date"
                         value={toInputDate(String(form.vigencia_inicio ?? ''))}
-                        min={toInputDate(String(form.criado_em ?? ''))}
+                        min={toInputDate(String(form.assinado_em ?? ''))}
                         max={toInputDate(String(form.vigencia_fim ?? ''))}
                         onChange={e => setField('vigencia_inicio', e.target.value)}
                       />
@@ -346,6 +360,112 @@ export default function ContractDetailsModal({ contract, children }: Props) {
                       label="Gestor"
                       value={usuarios.find(u => String(u.id) === String(data.gestor_id))?.nome ?? '—'}
                     />
+                  )}
+                </Box>
+
+                {/* Fiscais */}
+                <Box p={4} borderRadius="xl" bg={sectionBg}>
+                  <FieldLabel>Fiscais</FieldLabel>
+
+                  {isEditing ? (
+                    <>
+                      <NativeSelect.Root>
+                        <NativeSelect.Field
+                          value=""
+                          onChange={e => {
+                            const id = Number(e.target.value)
+
+                            if (!id) return
+
+                            if (!form.fiscais?.includes(id)) {
+                              setField("fiscais", [
+                                ...(form.fiscais ?? []),
+                                id,
+                              ])
+                            }
+                          }}
+                          cursor="pointer"
+                        >
+                          <option value="">Adicionar fiscal...</option>
+
+                          {usuarios
+                            .filter(
+                              u => !form.fiscais?.includes(Number(u.id))
+                            )
+                            .map(u => (
+                              <option
+                                key={u.id}
+                                value={String(u.id)}
+                              >
+                                {u.nome}
+                              </option>
+                            ))}
+                        </NativeSelect.Field>
+                      </NativeSelect.Root>
+
+                      {/* Selected fiscais tags */}
+                      {form.fiscais && form.fiscais.length > 0 && (
+                        <Flex gap="2" mt="2" wrap="wrap">
+                          {form.fiscais.map(id => {
+                            const usuario = usuarios.find(
+                              u => u.id === id
+                            )
+
+                            return (
+                              <Tag.Root
+                                key={id}
+                                size="md"
+                                variant="subtle"
+                              >
+                                <Tag.Label>
+                                  {usuario?.nome ?? id}
+                                </Tag.Label>
+
+                                <Tag.EndElement>
+                                  <Tag.CloseTrigger
+                                    onClick={() =>
+                                      setField(
+                                        "fiscais",
+                                        form.fiscais?.filter(
+                                          f => f !== id
+                                        )
+                                      )
+                                    }
+                                  />
+                                </Tag.EndElement>
+                              </Tag.Root>
+                            )
+                          })}
+                        </Flex>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {data.fiscais && data.fiscais.length > 0 ? (
+                        <Flex gap="2" mt="2" wrap="wrap">
+                          {data.fiscais.map(id => {
+                            const usuario = usuarios.find(
+                              u => Number(u.id) === Number(id)
+                            )
+
+                            return (
+                              <Tag.Root
+                                key={id}
+                                size="md"
+                                variant="subtle"
+                                bg={sectionBg}
+                              >
+                                <InfoItem label="" value={usuario?.nome ?? id} />
+                              </Tag.Root>
+                            )
+                          })}
+                        </Flex>
+                      ) : (
+                        <Text fontSize="sm" color={metaColor}>
+                          Nenhum fiscal vinculado
+                        </Text>
+                      )}
+                    </>
                   )}
                 </Box>
 

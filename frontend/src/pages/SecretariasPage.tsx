@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { useAppData } from '../contexts/ContractContext'
 import { useColorModeValue } from '../components/ui/color-mode'
 import { API_URL, type Secretaria } from '../types'
+import { showToast } from '../components/ui/app-toaster'
 
 export default function SecretariasPage() {
   const { secretarias, fetchSecretarias } = useAppData()
@@ -45,41 +46,67 @@ export default function SecretariasPage() {
 
   async function handleSave() {
     const isNew = editingId === 'new'
-
-    const url = isNew
+    try{
+      const url = isNew
       ? `${API_URL}/create_secretarias`
       : `${API_URL}/update_secretarias/${editedItem?.id}`
 
-    const method = isNew ? 'POST' : 'PUT'
+      const method = isNew ? 'POST' : 'PUT'
 
-    const payload = { ...editedItem }
-    if (isNew) delete payload.id
+      const payload = { ...editedItem }
+      if (isNew) delete payload.id
 
-    await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
+      await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
 
-    await fetchSecretarias()
-    cancelEditing()
+      await fetchSecretarias()
+      cancelEditing()
+      showToast({
+        type: "success",
+        title: isNew ? "Secretaria criada com sucesso!" : "Secretaria atualizada com sucesso!",
+      })
+      } catch (err) {
+        showToast({
+          type: "error",
+          title: isNew ? "Error ao criar secretaria" : "Error ao atualizar secretaria",
+        })
+      }
+    
   }
 
   async function handleDelete(id?: number | string) {
     if (!id) return
+    try{
+      await fetch(`${API_URL}/delete_secretarias/${id}`, {
+        method: 'DELETE',
+      })
 
-    await fetch(`${API_URL}/delete_secretarias/${id}`, {
-      method: 'DELETE',
-    })
-
-    await fetchSecretarias()
-    cancelEditing()
+      await fetchSecretarias()
+      cancelEditing()
+      showToast({
+        type: "success",
+        title:"Secreatria deletada com sucesso!",
+      })
+    }
+    catch(err){
+      showToast({
+        type: "error",
+        title:"Error ao deletar secreatria",
+      })
+    }
+    
   }
 
   function addNew() {
     setEditingId('new')
     setEditedItem({ nome: '' })
   }
+
+  const isValid = (editedItem?.nome ?? "").trim().length > 0
+
 
   const filtered = secretarias.filter(s =>
     Object.values(s).some(v =>
@@ -155,6 +182,7 @@ export default function SecretariasPage() {
               {editingId === 'new' && (
                 <Table.Row bg="blue.500/5">
                   <Table.Cell>
+                    <Text color="red.500">*</Text>
                     <Input
                       size="sm"
                       value={editedItem?.nome ?? ''}
@@ -164,7 +192,7 @@ export default function SecretariasPage() {
 
                   <Table.Cell>
                     <Flex justify="flex-end" gap={2}>
-                      <IconButton colorPalette="green" size="sm" onClick={handleSave}>
+                      <IconButton colorPalette="green" size="sm" onClick={handleSave} disabled={!isValid}>
                         <Check size={14} />
                       </IconButton>
                       <IconButton size="sm" variant="outline" onClick={cancelEditing}>
@@ -183,11 +211,14 @@ export default function SecretariasPage() {
                   <Table.Row key={String(item.id)}>
                     <Table.Cell>
                       {isEditing ? (
+                        <>
+                        <Text color="red.500">*</Text>
                         <Input
                           size="sm"
                           value={editedItem?.nome ?? ''}
                           onChange={e => updateField('nome', e.target.value)}
                         />
+                        </>
                       ) : (
                         <Text fontWeight="500">{item.nome}</Text>
                       )}
@@ -197,7 +228,7 @@ export default function SecretariasPage() {
                       <Flex justify="flex-end" gap={2}>
                         {isEditing ? (
                           <>
-                            <IconButton colorPalette="green" size="sm" onClick={handleSave}>
+                            <IconButton colorPalette="green" size="sm" onClick={handleSave} disabled={!isValid}>
                               <Check size={14} />
                             </IconButton>
 
@@ -205,7 +236,7 @@ export default function SecretariasPage() {
                               colorPalette="red"
                               size="sm"
                               onClick={() => handleDelete(item.id)}
-                              disabled
+                              // disabled
                             >
                               <Trash size={14} />
                             </IconButton>

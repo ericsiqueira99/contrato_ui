@@ -2,12 +2,11 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
-// require('dotenv').config();
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-console.log(process.env.DATABASE_URL)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -27,6 +26,27 @@ app.get('/api/tables', async (req, res) => {
   }
 });
 
+app.get('/api/contratos', async (req, res) => {
+  try {
+    const { sort = 'asc' } = req.query
+    const direction = sort === 'desc' ? 'DESC' : 'ASC'
+
+    const result = await pool.query(`
+      SELECT 
+        c.*,
+        COALESCE(array_agg(cf.usuario_id) FILTER (WHERE cf.usuario_id IS NOT NULL), '{}') AS fiscais
+      FROM contratos c
+      LEFT JOIN contrato_fiscais cf ON cf.contrato_id = c.id
+      GROUP BY c.id
+      ORDER BY c.vigencia_fim ${direction}
+    `)
+
+    res.json(result.rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.get('/api/:table', async (req, res) => {
   try {
     const { table } = req.params
@@ -43,9 +63,6 @@ app.get('/api/:table', async (req, res) => {
       return res.status(403).json({ error: 'Table not allowed' })
     }
 
-    // -----------------------------
-    // SAFE SORTING RULES PER TABLE
-    // -----------------------------
     const sortRules = {
       secretarias: 'nome',
       usuarios: 'nome',
@@ -67,47 +84,148 @@ app.get('/api/:table', async (req, res) => {
 })
 
 app.post('/api/update_contract/:id', async (req, res) => {
+  const client = await pool.connect()
   try {
     const { id } = req.params
-    const data = req.body
-
+    const { fiscais, ...data } = req.body  // separate fiscais from contract fields
 
     const keys = Object.keys(data)
-
-    if (!keys.length) {
-      return res
-        .status(400)
-        .json({
-          error: 'No fields provided',
-        })
+    if (!keys.length && !fiscais) {
+      return res.status(400).json({ error: 'No fields provided' })
     }
 
-    const values = Object.values(data)
+    await client.query('BEGIN')
 
-    const setClause = keys
-      .map(
-        (key, index) =>
-          `"${key}" = $${index + 1}`
+    // Update contrato fields (only if there are fields besides fiscais)
+    let updatedContrato = null
+    if (keys.length) {
+      const values = Object.values(data)
+      const setClause = keys.map((key, i) => `"${key}" = $${i + 1}`).join(', ')
+      const query = `UPDATE "contratos" SET ${setClause} WHERE id = $${keys.length + 1} RETURNING *`
+      const result = await client.query(query, [...values, id])
+      updatedContrato = result.rows[0]
+    }
+
+    // Sync fiscais if provided
+    if (fiscais !== undefined) {
+      // fiscais should be an array of usuario_id, e.g. [1, 2, 3]
+      if (!Array.isArray(fiscais)) {
+        throw new Error('fiscais must be an array of usuario_ids')
+      }
+
+      await client.query(
+        `DELETE FROM contrato_fiscais WHERE contrato_id = $1`,
+        [id]
       )
-      .join(', ')
 
-    const query = `
-      UPDATE "contratos"
-      SET ${setClause}
-      WHERE id = $${keys.length + 1}
-      RETURNING *
-    `
+      if (fiscais.length > 0) {
+        const fiscaisValues = fiscais
+          .map((_, i) => `($1, $${i + 2})`)
+          .join(', ')
+        await client.query(
+          `INSERT INTO contrato_fiscais (contrato_id, usuario_id) VALUES ${fiscaisValues}`,
+          [id, ...fiscais]
+        )
+      }
+    }
 
-    const result = await pool.query(
-      query,
-      [...values, id]
+    await client.query('COMMIT')
+
+    // Return contrato + updated fiscais list
+    const fiscaisResult = await client.query(
+      `SELECT usuario_id FROM contrato_fiscais WHERE contrato_id = $1`,
+      [id]
     )
 
-    res.json(result.rows[0])
-  } catch (err) {
-    res.status(500).json({
-      error: err.message,
+    res.json({
+      ...updatedContrato,
+      fiscais: fiscaisResult.rows.map(r => r.usuario_id),
     })
+  } catch (err) {
+    await client.query('ROLLBACK')
+    res.status(500).json({ error: err.message })
+  } finally {
+    client.release()
+  }
+})
+
+app.post('/api/create_contrato', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const {
+      numero_contrato,
+      objeto,
+      valor_inicial,
+      vigencia_inicio,
+      vigencia_fim,
+      secretaria_id,
+      empresa_id,
+      gestor_id,
+      legislacao,
+      publicado_ama,
+      publicado_pncp,
+      criado_em,
+      assinado_em,
+      fiscais = [],  // array of usuario_ids, optional
+    } = req.body
+    if (!numero_contrato) return res.status(400).json({ error: 'Número do contrato is required' })
+    if (!objeto) return res.status(400).json({ error: 'Objeto is required' })
+    if (!secretaria_id) return res.status(400).json({ error: 'Secretaria is required' })
+    if (vigencia_inicio && vigencia_fim && new Date(vigencia_inicio) > new Date(vigencia_fim)) {
+      return res.status(400).json({ error: 'Vigência início must be before vigência fim' })
+    }
+
+    await client.query('BEGIN')
+
+    const result = await client.query(
+      `INSERT INTO "contratos" (
+        numero_contrato, objeto, valor_inicial, criado_em, assinado_em,
+        vigencia_inicio, vigencia_fim, secretaria_id,
+        empresa_id, gestor_id, legislacao, publicado_ama, publicado_pncp
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      RETURNING *`,
+      [
+        numero_contrato,
+        objeto,
+        valor_inicial || null,
+        criado_em || new Date(),
+        assinado_em || new Date(),
+        vigencia_inicio || null,
+        vigencia_fim || null,
+        secretaria_id || null,
+        empresa_id || null,
+        gestor_id || null,
+        legislacao || null,
+        publicado_ama ?? null,
+        publicado_pncp ?? null,
+      ]
+    )
+
+    const contrato = result.rows[0]
+
+    // Insert fiscais if provided
+    if (fiscais.length > 0) {
+      const fiscaisValues = fiscais
+        .map((_, i) => `($1, $${i + 2})`)
+        .join(', ')
+      await client.query(
+        `INSERT INTO contrato_fiscais (contrato_id, usuario_id) VALUES ${fiscaisValues}`,
+        [contrato.id, ...fiscais]
+      )
+    }
+
+    await client.query('COMMIT')
+
+    res.status(201).json({
+      ...contrato,
+      fiscais,
+    })
+  } catch (err) {
+    await client.query('ROLLBACK')
+    console.log(err)
+    res.status(500).json({ error: err.message })
+  } finally {
+    client.release()
   }
 })
 
@@ -162,15 +280,15 @@ app.put('/api/users/:id', async (req, res) => {
 
 app.post('/api/user', async (req, res) => {
   try {
-    const { nome, email, secretaria_id } = req.body
+    const { nome, email, telefone, secretaria_id } = req.body
 
     const result = await pool.query(
       `
-      INSERT INTO "usuarios" (nome, email, secretaria_id)
-      VALUES ($1, $2, $3)
+      INSERT INTO "usuarios" (nome, email, telefone, secretaria_id)
+      VALUES ($1, $2, $3, $4)
       RETURNING *
       `,
-      [nome, email, secretaria_id]
+      [nome, email, telefone, secretaria_id]
     )
 
     res.status(201).json(result.rows[0])
@@ -317,9 +435,9 @@ app.put('/api/update_empresa/:id', async (req, res) => {
 
 app.post('/api/create_empresa', async (req, res) => {
   try {
-    const { razao_fiscal, cnpj } = req.body
+    const { razao_social, cnpj, email, telefone } = req.body
 
-    if (!razao_fiscal) {
+    if (!razao_social) {
       return res.status(400).json({
         error: 'Razão Fiscal is required',
       })
@@ -332,11 +450,11 @@ app.post('/api/create_empresa', async (req, res) => {
 
     const result = await pool.query(
       `
-      INSERT INTO "empresas" (nome, cnpj)
-      VALUES ($1)
+      INSERT INTO "empresas" (razao_social, cnpj, email, telefone)
+      VALUES ($1, $2, $3, $4)
       RETURNING *
       `,
-      [razao_fiscal, cnpj]
+      [razao_social, cnpj, email, telefone ]
     )
 
     res.status(201).json(result.rows[0])
@@ -369,115 +487,6 @@ app.delete('/api/delete_empresa/:id', async (req, res) => {
   } catch (err) {
     console.log(err)
     res.status(500).json({ error: err.message })
-  }
-})
-
-app.post('/api/create_contrato', async (req, res) => {
-  try {
-    const {
-      numero_contrato,
-      objeto,
-      valor_inicial,
-      vigencia_inicio,
-      vigencia_fim,
-      secretaria_id,
-      empresa_id,
-      gestor_id,
-      legislacao,
-      publicado_ama,
-      publicado_pncp,
-      criado_em,
-    } = req.body
-
-    // Required fields
-    if (!numero_contrato) {
-      return res.status(400).json({
-        error: 'Número do contrato is required',
-      })
-    }
-
-    if (!objeto) {
-      return res.status(400).json({
-        error: 'Objeto is required',
-      })
-    }
-
-    if (!secretaria_id) {
-      return res.status(400).json({
-        error: 'Secretaria is required',
-      })
-    }
-
-    // Date validation
-    if (
-      criado_em &&
-      vigencia_inicio &&
-      new Date(criado_em) >
-        new Date(vigencia_inicio)
-    ) {
-      return res.status(400).json({
-        error:
-          'Criado em must be before vigência início',
-      })
-    }
-
-    if (
-      vigencia_inicio &&
-      vigencia_fim &&
-      new Date(vigencia_inicio) >
-        new Date(vigencia_fim)
-    ) {
-      return res.status(400).json({
-        error:
-          'Vigência início must be before vigência fim',
-      })
-    }
-
-    const result = await pool.query(
-      `
-      INSERT INTO "contratos" (
-        numero_contrato,
-        objeto,
-        valor_inicial,
-        criado_em,
-        vigencia_inicio,
-        vigencia_fim,
-        secretaria_id,
-        empresa_id,
-        gestor_id,
-        legislacao,
-        publicado_ama,
-        publicado_pncp
-      )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,
-        $7,$8,$9,$10,$11,$12
-      )
-      RETURNING *
-      `,
-      [
-        numero_contrato,
-        objeto,
-        valor_inicial || null,
-        criado_em || new Date(),
-        vigencia_inicio || null,
-        vigencia_fim || null,
-        secretaria_id || null,
-        empresa_id || null,
-        gestor_id || null,
-        legislacao || null,
-        publicado_ama ?? null,
-        publicado_pncp ?? null,
-      ]
-    )
-
-    res.status(201).json(result.rows[0])
-  } catch (err) {
-    console.log(err)
-
-    res.status(500).json({
-      error: err.message,
-    })
   }
 })
 
